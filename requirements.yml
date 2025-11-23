@@ -1,0 +1,22 @@
+name: LocalHack
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - numpy
+      - opencv-python
+
+      - torch
+      - torchvision
+      - torchaudio
+
+      - mmengine
+      - mmcv
+      - mmdet
+      - mmpose
+
+      - matplotlib
+      - tqdm
