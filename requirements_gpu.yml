@@ -1,0 +1,30 @@
+name: LocalHackGPU
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - opencv
+  - matplotlib
+  - tqdm
+
+  # -------------------------------
+  #  PyTorch GPU (CUDA 11.8)
+  # -------------------------------
+  - pytorch=2.1.0
+  - torchvision=0.16.0
+  - torchaudio=2.1.0
+  - pytorch-cuda=11.8    # 自动拉取 CUDA 11.8 运行时
+  - cuda-toolkit=11.8
+
+  - pip:
+      # OpenMMLab dependencies
+      - mmengine
+      - mmcv>=2.0.0
+      - mmdet>=3.0.0
+      - mmpose
+      - opencv-python
