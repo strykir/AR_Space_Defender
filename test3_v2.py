@@ -314,11 +314,11 @@ class HandGame:
         ring = hand_lms.landmark[16]
         little = hand_lms.landmark[20]
 
-        t_knuckle = hand_lms.landmark[4]
-        i_knuckle = hand_lms.landmark[8]
-        m_knuckle = hand_lms.landmark[12]
-        r_knuckle = hand_lms.landmark[16]
-        l_knuckle = hand_lms.landmark[20]
+        t_knuckle = hand_lms.landmark[1]
+        i_knuckle = hand_lms.landmark[5]
+        m_knuckle = hand_lms.landmark[9]
+        r_knuckle = hand_lms.landmark[13]
+        l_knuckle = hand_lms.landmark[17]
 
         # Convert normalized coordinates to pixel coordinates
         x4, y4 = int(thumb.x * w), int(thumb.y * h)

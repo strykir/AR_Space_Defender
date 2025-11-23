@@ -1,1 +1,18 @@
-{}
+{
+    "SO": {
+        "EASY": {
+            "best_score": 0,
+            "history": []
+        },
+        "NORMAL": {
+            "best_score": 3,
+            "history": [
+                3
+            ]
+        },
+        "HARD": {
+            "best_score": 0,
+            "history": []
+        }
+    }
+}
