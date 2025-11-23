@@ -1,1 +1,8 @@
-Read me file commit thing
+# Requirements
+Run the following:
+
+```
+pip3 install opencv-python
+pip3 install numpy
+pip3 install mediapipe
+```
