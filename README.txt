@@ -1,8 +1,2 @@
-# Requirements
-Run the following:
-
-```
-pip3 install opencv-python
-pip3 install numpy
-pip3 install mediapipe
-```
+# References
+Look at the following for hands documention: [link](https://mediapipe.readthedocs.io/en/latest/solutions/hands.html)
