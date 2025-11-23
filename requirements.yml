@@ -1,6 +1,5 @@
-name: LocalHack
+name: Hand_Camera
 channels:
-  - conda-forge
   - defaults
 dependencies:
   - python=3.11
@@ -8,15 +7,5 @@ dependencies:
   - pip:
       - numpy
       - opencv-python
-
-      - torch
-      - torchvision
-      - torchaudio
-
-      - mmengine
-      - mmcv
-      - mmdet
-      - mmpose
-
-      - matplotlib
-      - tqdm
+      - mediapipe
+      - pygame
