@@ -3,12 +3,12 @@ import mediapipe as mp
 import time
 #opening camera (0 for the default camera)
 
-fingertips = [4, 8, 12, 16, 20]
+fingertips = [4, 8]
 
 videoCap = cv2.VideoCapture(0)
 lastFrameTime = 0
 handSolution = mp.solutions.hands
-hands = handSolution.Hands()
+hands = handSolution.Hands(max_num_hands=2,)
 while True:
     #reading image
     success, img = videoCap.read()

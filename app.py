@@ -14,7 +14,7 @@ class HandGame:
         # --- 初始化 MediaPipe 手部模型 ---
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
-            max_num_hands=1,               # 只追踪一只手，避免混乱
+            max_num_hands=2,               # 只追踪一只手，避免混乱
             min_detection_confidence=0.7,
             min_tracking_confidence=0.7
         )
