@@ -12,5 +12,47 @@
             "best_score": 0,
             "history": []
         }
+    },
+    "Y": {
+        "EASY": {
+            "best_score": 0,
+            "history": []
+        },
+        "NORMAL": {
+            "best_score": 0,
+            "history": []
+        },
+        "HARD": {
+            "best_score": 0,
+            "history": []
+        }
+    },
+    "UU": {
+        "EASY": {
+            "best_score": 0,
+            "history": []
+        },
+        "NORMAL": {
+            "best_score": 0,
+            "history": []
+        },
+        "HARD": {
+            "best_score": 0,
+            "history": []
+        }
+    },
+    "P": {
+        "EASY": {
+            "best_score": 0,
+            "history": []
+        },
+        "NORMAL": {
+            "best_score": 0,
+            "history": []
+        },
+        "HARD": {
+            "best_score": 0,
+            "history": []
+        }
     }
 }
