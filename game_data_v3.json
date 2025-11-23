@@ -1,0 +1,16 @@
+{
+    "R": {
+        "EASY": {
+            "best_score": 0,
+            "history": []
+        },
+        "NORMAL": {
+            "best_score": 0,
+            "history": []
+        },
+        "HARD": {
+            "best_score": 0,
+            "history": []
+        }
+    }
+}
