@@ -206,9 +206,9 @@ class HandGame:
         # =================================================
         spawned_boss = False
         
-        if self.current_difficulty == "EASY" and np.log2(self.score) == np.floor(np.log2(self.score)):
-            chance = 1
-            # chance = np.log2(self.score)/50
+        if (self.current_difficulty == "NORMAL" or self.current_difficulty == "HARD") and np.log2(self.score) == np.floor(np.log2(self.score)):
+            # chance = 1
+            chance = np.log2(self.score)/50
             if random.random() < chance: # 90% chance
                 enemy_type = 'boss'
                 enemy_color = (0, 255, 255) # Yellowish fallback
