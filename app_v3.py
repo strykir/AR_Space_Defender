@@ -343,7 +343,7 @@ class HandGame:
 
             # --- STATE LOGIC ---
             if self.state == "LOGIN":
-                cv2.putText(img, "PLEASE ENTER NAME", (int(self.width*0.3), int(self.height*0.15)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+                cv2.putText(img, "PLEASE ENTER NAME", (int(self.width*0.3), int(self.height*0.10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 self.keyboard.draw(img, overlay, cursor_positions) 
                 self.btn_skip.draw_on_overlay(overlay, any(self.btn_skip.is_hovering(*c) for c in cursor_positions))
 
