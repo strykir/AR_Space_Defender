@@ -15,20 +15,14 @@ class HandGame:
     def __init__(self):
         # --- Window Setup (Fullscreen) ---
         self.window_name = "Hand Game Ultimate"
-        # Create the window first to apply fullscreen properties
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
         cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         # --- Camera Setup ---
         self.cap = cv2.VideoCapture(0)
-        
-        # We try to request a decent HD resolution. 
-        # Even if the camera forces 640x480, the fullscreen window will stretch it to fit the monitor.
-        # Because we use relative coordinates for UI, alignment remains perfect.
         self.cap.set(3, 1280)
         self.cap.set(4, 720)
         
-        # Read actual camera dimensions
         success, img = self.cap.read()
         if success:
             self.height, self.width, _ = img.shape
@@ -58,9 +52,21 @@ class HandGame:
         self.pinch_threshold = 40
         self.enable_special_enemies = False 
 
-        # --- Assets ---
-        self.icons_pinch = self.load_images_from_folder("icons/pinch")
-        self.icons_fist = self.load_images_from_folder("icons/fist")
+        # ===============================================================
+        # [NEW] LOAD SPECIFIC ASSETS
+        # ===============================================================
+        self.icons_pinch = self.load_images_from_folder("src/icons/pinch")
+        self.icons_fist = self.load_images_from_folder("src/icons/fist")
+        
+        # Load Default Ship
+        self.img_ship_default = self.load_single_image("src/icons/spaceship/spaceship.png")
+        
+        # Load Special Assets
+        self.img_enemy_special = self.load_single_image("src/icons/special/special_enemy.png")
+        self.img_ship_evolved = self.load_single_image("src/icons/special/special_ship.png")
+
+        # State to track which ship to draw
+        self.current_ship_img = self.img_ship_default 
 
         # --- UI Initialization ---
         self.init_ui_elements()
@@ -71,10 +77,7 @@ class HandGame:
         self.set_difficulty("NORMAL") 
 
     def init_ui_elements(self):
-        """
-        Calculates UI positions based on the actual camera image size (self.width, self.height).
-        Since the image is stretched to fullscreen, these relative positions scale perfectly.
-        """
+        """Calculates dynamic UI positions based on screen size."""
         W, H = self.width, self.height
         cx = W // 2  
         cy = H // 2  
@@ -92,12 +95,12 @@ class HandGame:
         # --- 2. CONFIRM / DIALOGS ---
         self.btn_confirm_yes = Button("CONFIRM", (cx - btn_w - 10, cy + 50), size=btn_size, color=(150, 255, 150))
         self.btn_confirm_no = Button("GO BACK", (cx + 10, cy + 50), size=btn_size, color=(255, 150, 150))
-
         self.btn_delete_yes = Button("YES, DELETE", (cx - btn_w - 10, cy + 50), size=btn_size, color=(255, 100, 100))
         self.btn_delete_no = Button("NO, GO BACK", (cx + 10, cy + 50), size=btn_size, color=(150, 255, 150))
 
         # --- 3. MENU SCREEN ---
-        start_y = int(H * 0.4)
+        # [MODIFIED] Removed "CHANGE SHIP" button layout
+        start_y = int(H * 0.35)
         step_y = int(H * 0.12)
         self.btn_start = Button("START GAME", (cx - btn_w//2, start_y), size=btn_size)
         self.btn_records = Button("RECORDS", (cx - btn_w//2, start_y + step_y), size=btn_size)
@@ -128,7 +131,6 @@ class HandGame:
         self.btn_back_from_switch = Button("BACK", (cx - btn_w//2, H - btn_h - 20), size=btn_size)
 
         # --- 7. PAUSE OVERLAY ---
-        # Pause button stuck to top-right
         pause_size = int(W * 0.06)
         self.btn_pause = Button("II", (W - pause_size - 20, 20), size=(pause_size, int(pause_size*0.8)), color=(255, 255, 200))
         
@@ -138,30 +140,32 @@ class HandGame:
         self.btn_save_quit = Button("SAVE & QUIT", (cx - btn_w//2, p_y + step_y * 2), size=btn_size, color=(255, 150, 150))
 
     def load_images_from_folder(self, folder):
+        """Loads all images from a folder into a list."""
         images = []
         if not os.path.exists(folder): return []
         for filename in os.listdir(folder):
             try:
-                # Load image with Alpha Channel (UNCHANGED)
                 img = cv2.imread(os.path.join(folder, filename), cv2.IMREAD_UNCHANGED)
                 if img is not None: images.append(img)
             except: pass
         return images
 
+    def load_single_image(self, path):
+        """Loads a single image safely."""
+        if os.path.exists(path):
+            return cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        return None
+
     def refresh_user_buttons(self):
         users = self.db.get_user_list()
         self.user_buttons = []
-        
         W, H = self.width, self.height
         margin_x = int(W * 0.1)
         margin_y = int(H * 0.2)
-        
         btn_w = int(W * 0.25)
         btn_h = int(H * 0.1)
         gap_x = 20
         gap_y = 20
-        
-        # Calculate columns based on width
         cols = max(1, (W - 2 * margin_x) // (btn_w + gap_x))
         
         for i, u_name in enumerate(users):
@@ -196,30 +200,54 @@ class HandGame:
         enemy_color = (0, 0, 255)
         icon_img = None
 
-        is_special = False
-        if self.current_difficulty == "HARD" and self.enable_special_enemies:
-            if random.random() < 0.3:
-                is_special = True
-                enemy_type = 'square'
-                enemy_color = (255, 0, 0)
+        # =================================================
+        # [NEW] BOSS SPAWN LOGIC
+        # Condition: Hard Mode + Score >= 64 + 90% Chance
+        # =================================================
+        spawned_boss = False
+        
+        if self.current_difficulty == "HARD" and self.score >= 64:
+            if random.random() < 0.9: # 90% chance
+                enemy_type = 'boss'
+                enemy_color = (0, 255, 255) # Yellowish fallback
+                icon_img = self.img_enemy_special
+                spawned_boss = True
+                print("DEBUG: BOSS SPAWNED!")
 
-        if is_special and self.icons_fist:
-            icon_img = random.choice(self.icons_fist)
-        elif not is_special and self.icons_pinch:
-            icon_img = random.choice(self.icons_pinch)
+        # If not boss, do standard logic
+        if not spawned_boss:
+            # Special "Square" Enemy Logic (Toggle based)
+            is_special_square = False
+            chance = 0.0
+            if self.enable_special_enemies:
+                if self.current_difficulty == "HARD": chance = 0.5 
+                elif self.current_difficulty == "NORMAL": chance = 0.3
+                else: chance = 0.1
+                
+                if random.random() < chance:
+                    is_special_square = True
+                    enemy_type = 'square'
+                    enemy_color = (255, 0, 0)
+
+            # Assign Icon for standard types
+            if is_special_square and self.icons_fist:
+                icon_img = random.choice(self.icons_fist)
+            elif not is_special_square and self.icons_pinch:
+                icon_img = random.choice(self.icons_pinch)
 
         self.enemies.append({
             'x': x, 'y': y,
             'vx': math.cos(angle) * speed,
             'vy': math.sin(angle) * speed,
-            'radius': int(self.width * 0.035), # Scaled radius
+            'radius': int(self.width * 0.04) if enemy_type == 'boss' else int(self.width * 0.035),
             'color': enemy_color,
             'type': enemy_type,
             'icon': icon_img
         })
 
-    def draw_enemy_icon(self, bg_img, icon, x, y, size):
-        diameter = size * 2
+    # [HELPER] Draw transparent PNG
+    def draw_image_centered(self, bg_img, icon, x, y, diameter):
+        if icon is None: return
         if diameter <= 0: return 
         try:
             icon_resized = cv2.resize(icon, (diameter, diameter))
@@ -229,8 +257,7 @@ class HandGame:
         y1, y2 = y - h // 2, y + h // 2
         x1, x2 = x - w // 2, x + w // 2
 
-        if y1 < 0 or y2 > bg_img.shape[0] or x1 < 0 or x2 > bg_img.shape[1]:
-            return 
+        if y1 < 0 or y2 > bg_img.shape[0] or x1 < 0 or x2 > bg_img.shape[1]: return 
 
         if icon_resized.shape[2] == 4:
             alpha_s = icon_resized[:, :, 3] / 255.0
@@ -252,8 +279,6 @@ class HandGame:
             total_dist += dist
         middle_mcp = hand_lms.landmark[9]
         cx, cy = int(middle_mcp.x * w), int(middle_mcp.y * h)
-        
-        # Threshold scales with screen height to support different resolutions
         threshold = h * 0.6 
         is_fist = total_dist < threshold
         return is_fist, (cx, cy)
@@ -290,12 +315,6 @@ class HandGame:
             success, img = self.cap.read()
             if not success: break
             
-            # Optional: Handle Manual Resize (if user exits fullscreen)
-            # h, w, _ = img.shape
-            # if self.width != w or self.height != h:
-            #     self.width, self.height = w, h
-            #     self.init_ui_elements()
-
             img = cv2.flip(img, 1)
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             results = self.hands.process(img_rgb)
@@ -389,9 +408,12 @@ class HandGame:
             elif self.state == "MENU":
                 display_name = "Guest" if self.is_guest else self.current_user
                 cv2.putText(img, f"Welcome, {display_name}", (int(self.width*0.05), int(self.height*0.1)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+                
+                # [MODIFIED] Removed "CHANGE SHIP" button
                 for btn in [self.btn_start, self.btn_records, self.btn_exit]:
                     is_hover = any(btn.is_hovering(*c) for c in cursor_positions)
                     btn.draw_on_overlay(overlay, is_hover) 
+                
                 for click_pos in all_clicks:
                     if self.btn_start.is_hovering(*click_pos): self.state = "DIFFICULTY"
                     elif self.btn_records.is_hovering(*click_pos): self.state = "RECORDS"
@@ -411,12 +433,15 @@ class HandGame:
                     if self.btn_easy.is_hovering(*click_pos):
                         self.set_difficulty("EASY")
                         self.state = "PLAYING"
+                        self.current_ship_img = self.img_ship_default # Reset Ship
                     elif self.btn_med.is_hovering(*click_pos):
                         self.set_difficulty("NORMAL")
                         self.state = "PLAYING"
+                        self.current_ship_img = self.img_ship_default # Reset Ship
                     elif self.btn_hard.is_hovering(*click_pos):
                         self.set_difficulty("HARD")
                         self.state = "PLAYING"
+                        self.current_ship_img = self.img_ship_default # Reset Ship
                     elif self.btn_back.is_hovering(*click_pos):
                         self.state = "MENU"
                     elif self.btn_special_toggle.is_hovering(*click_pos):
@@ -428,7 +453,12 @@ class HandGame:
                         self.last_spawn_time = time.time()
 
             elif self.state == "PLAYING":
-                cv2.circle(img, self.center, 30, (0, 255, 0), -1)
+                # [NEW] Draw Current Player Ship (Default or Evolved)
+                if self.current_ship_img is not None:
+                    self.draw_image_centered(img, self.current_ship_img, self.center[0], self.center[1], 80)
+                else:
+                    cv2.circle(img, self.center, 30, (0, 255, 0), -1)
+
                 cv2.putText(img, f"Score: {self.score}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 2)
                 cv2.putText(img, f"Diff: {self.current_difficulty}", (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
                 if self.is_guest:
@@ -451,6 +481,7 @@ class HandGame:
                     
                     hit_enemy = False
                     
+                    # 1. Circle Enemy -> Pinch
                     if enemy['type'] == 'circle':
                         for click_pos in all_clicks:
                             if math.hypot(enemy['x'] - click_pos[0], enemy['y'] - click_pos[1]) < (enemy['radius'] + 30):
@@ -459,11 +490,22 @@ class HandGame:
                                 hit_enemy = True
                                 break 
                     
-                    elif enemy['type'] == 'square':
+                    # 2. Square/Boss Enemy -> Fist
+                    elif enemy['type'] == 'square' or enemy['type'] == 'boss':
                         for fist_pos in all_fists:
                              if math.hypot(enemy['x'] - fist_pos[0], enemy['y'] - fist_pos[1]) < (enemy['radius'] + 40): 
+                                
+                                # [NEW] Boss Transformation Logic
+                                if enemy['type'] == 'boss':
+                                    self.score += 10
+                                    # Transform Ship!
+                                    if self.img_ship_evolved is not None:
+                                        self.current_ship_img = self.img_ship_evolved
+                                    print("BOSS DEFEATED! SHIP EVOLVED!")
+                                else:
+                                    self.score += 2
+                                    
                                 self.enemies.remove(enemy)
-                                self.score += 2
                                 hit_enemy = True
                                 break
 
@@ -477,10 +519,15 @@ class HandGame:
                     draw_x, draw_y = int(enemy['x']), int(enemy['y'])
                     
                     if enemy.get('icon') is not None:
-                        self.draw_enemy_icon(img, enemy['icon'], draw_x, draw_y, enemy['radius'])
+                        self.draw_image_centered(img, enemy['icon'], draw_x, draw_y, int(enemy['radius']*2))
                     else:
+                        # Fallback shapes
                         if enemy['type'] == 'circle':
                             cv2.circle(img, (draw_x, draw_y), int(enemy['radius']), enemy['color'], -1)
+                        elif enemy['type'] == 'boss':
+                            # Boss fallback if image missing: Big Yellow Circle
+                            cv2.circle(img, (draw_x, draw_y), int(enemy['radius']), (0, 255, 255), -1)
+                            cv2.circle(img, (draw_x, draw_y), int(enemy['radius']), (255, 255, 255), 4)
                         else:
                             r = int(enemy['radius'])
                             cv2.rectangle(img, (draw_x-r, draw_y-r), (draw_x+r, draw_y+r), enemy['color'], -1)
@@ -503,6 +550,7 @@ class HandGame:
                         self.score = 0
                         self.last_spawn_time = time.time()
                         self.state = "PLAYING"
+                        self.current_ship_img = self.img_ship_default # Reset Ship
                     elif self.btn_save_quit.is_hovering(*click_pos):
                         if not self.is_guest: self.db.add_score(self.current_user, self.score, self.current_difficulty)
                         self.state = "MENU"
@@ -566,11 +614,6 @@ class HandGame:
             cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
 
             # --- STEP 4: DRAW TEXT LAYERS ---
-            # Note: Re-enable specific draws if alpha blending makes text blurry.
-            # For simplicity, the overlaid text from earlier steps (via draw_on_overlay logic usually only draws boxes)
-            # might need explicit text redraws here if Button class handles text separately.
-            
-            # Force redraw text on top layer to ensure sharpness
             if self.state == "LOGIN": 
                 self.keyboard.draw_text(img)
                 self.btn_skip.draw_text_and_border(img)
@@ -584,6 +627,7 @@ class HandGame:
                 self.btn_delete_yes.draw_text_and_border(img)
                 self.btn_delete_no.draw_text_and_border(img)
             elif self.state == "MENU": 
+                # [MODIFIED] Removed "Change Ship"
                 for btn in [self.btn_start, self.btn_records, self.btn_exit]: btn.draw_text_and_border(img)
             elif self.state == "DIFFICULTY":
                 for btn in [self.btn_easy, self.btn_med, self.btn_hard, self.btn_back, self.btn_special_toggle]: btn.draw_text_and_border(img)
@@ -620,7 +664,6 @@ class HandGame:
                 else:
                     cv2.circle(img, (cx, cy), 15, (0, 0, 255), 2)  
 
-            # Display using the named fullscreen window
             cv2.imshow(self.window_name, img)
             if cv2.waitKey(1) & 0xFF == 27: break
 
