@@ -16,12 +16,19 @@ class HandGame:
         # --- Camera Setup ---
         self.cap = cv2.VideoCapture(0)
         
-        # [MODIFIED] Adaptive Resolution
-        # We attempt to set 1280x720, but we read back what the camera actually supports.
+        # Request 1280x720, but don't trust it blindly
         self.cap.set(3, 1280)
         self.cap.set(4, 720)
-        self.width = int(self.cap.get(3))
-        self.height = int(self.cap.get(4))
+        
+        # [CRITICAL FIX] Read the ACTUAL resolution provided by the hardware
+        success, img = self.cap.read()
+        if success:
+            self.height, self.width, _ = img.shape
+        else:
+            # Fallback defaults if camera fails immediately
+            self.width = 1280
+            self.height = 720
+            
         self.center = (self.width // 2, self.height // 2)
         
         # --- MediaPipe Setup ---
@@ -32,113 +39,138 @@ class HandGame:
         # --- Data & System ---
         self.db = DataManager()
         
-        # --- Game State Variables ---
+        # --- Game State ---
         self.running = True
         self.state = "LOGIN" 
         self.current_user = None
         self.is_guest = False 
         self.current_difficulty = "NORMAL"
         
-        # --- Gesture Logic Variables ---
         self.hand_clicked_status = {} 
         self.pinch_threshold = 40
         self.enable_special_enemies = False 
 
-        # ===============================================================
-        # [NEW] ICON LOADING SYSTEM
-        # We load images into lists. If list is empty, we use shapes.
-        # ===============================================================
+        # --- Assets ---
         self.icons_pinch = self.load_images_from_folder("icons/pinch")
         self.icons_fist = self.load_images_from_folder("icons/fist")
 
-        # --- UI ELEMENTS (Dynamic Positioning) ---
-        # [MODIFIED] All positions are now calculated relative to self.width/self.height
-        
-        self.keyboard = VirtualKeyboard(int(self.width * 0.3), int(self.height * 0.35))
-        
-        # Common center X for menus
-        cx_menu = (self.width - 200) // 2 
-        
-        # 1. Login/Add User Buttons
-        # Position: Bottom Right
-        self.btn_skip = Button("SKIP (GUEST)", (self.width - 300, self.height - 100), size=(280, 60), color=(150, 200, 255))
-        self.btn_back_to_record_kb = Button("BACK", (50, self.height - 100), size=(200, 60), color=(255, 100, 100))
-        
-        # 2. Confirm Screen Buttons
-        self.btn_confirm_yes = Button("CONFIRM", (cx_menu - 150, 400), color=(150, 255, 150))
-        self.btn_confirm_no = Button("GO BACK", (cx_menu + 150, 400), color=(255, 150, 150))
-
-        # 3. Delete Confirm Screen Buttons
-        self.btn_delete_yes = Button("YES, DELETE", (cx_menu - 150, 400), color=(255, 100, 100)) 
-        self.btn_delete_no = Button("NO, GO BACK", (cx_menu + 150, 400), color=(150, 255, 150)) 
-
-        # 4. Menu Buttons (Centered)
-        self.btn_start = Button("START GAME", (cx_menu, 300))
-        self.btn_records = Button("RECORDS", (cx_menu, 400))
-        self.btn_exit = Button("EXIT", (cx_menu, 500))
-        
-        # 5. Difficulty & Special Toggle Buttons
-        # Calculated to spread evenly
-        step_x = self.width // 5
-        self.btn_easy = Button("EASY", (step_x - 100, 300), color=(150, 255, 150))
-        self.btn_med = Button("NORMAL", (step_x * 2 - 100, 300), color=(150, 150, 255))
-        self.btn_hard = Button("HARD", (step_x * 3 - 100, 300), color=(150, 150, 150))
-        
-        self.btn_back = Button("BACK", (cx_menu, 500))
-        self.btn_special_toggle = Button("SPECIAL: OFF", (cx_menu, 400), size=(250, 60), color=(200, 200, 200))
-
-        # 6. Records Screen Buttons
-        self.btn_back_rec = Button("BACK", (self.width - 250, self.height - 100))
-        self.btn_delete_user = Button("DELETE USER", (50, self.height - 100), size=(250, 60), color=(100, 100, 255))
-        self.btn_switch_user = Button("SWITCH USER", (cx_menu, self.height - 100), size=(250, 60), color=(255, 255, 150))
-        self.btn_add_user = Button("ADD USER", (cx_menu, self.height - 180), size=(250, 60), color=(200, 255, 200))
-
-        # 7. Switch User Select Screen
-        self.user_buttons = []
-        self.btn_back_from_switch = Button("BACK", (cx_menu, self.height - 100))
-
-        # 8. Pause Menu Buttons
-        # [MODIFIED] Pause button anchored to Top-Right corner
-        self.btn_pause = Button("II", (self.width - 100, 30), size=(80, 60), color=(255, 255, 200)) 
-        self.btn_resume = Button("RESUME", (cx_menu, 250), color=(150, 255, 150))
-        self.btn_restart = Button("RESTART", (cx_menu, 350), color=(255, 255, 150))
-        self.btn_save_quit = Button("SAVE & QUIT", (cx_menu, 450), color=(255, 150, 150))
+        # --- UI Initialization (Dynamic) ---
+        self.init_ui_elements()
 
         self.enemies = []
         self.score = 0
         self.difficulty_settings = {}
         self.set_difficulty("NORMAL") 
 
-    # [NEW] Function to load images and resize them
+    def init_ui_elements(self):
+        """
+        [MODIFIED] All UI positions are calculated based on self.width and self.height.
+        This ensures the game looks correct on ANY resolution (640x480, 1280x720, 1920x1080).
+        """
+        W, H = self.width, self.height
+        cx = W // 2  # Center X
+        cy = H // 2  # Center Y
+        
+        # Standard Button Size relative to screen height
+        btn_w = int(W * 0.2) # 20% of screen width
+        btn_h = int(H * 0.08) # 8% of screen height
+        btn_size = (btn_w, btn_h)
+        
+        # Virtual Keyboard Position
+        self.keyboard = VirtualKeyboard(int(W * 0.3), int(H * 0.3))
+        
+        # --- 1. LOGIN SCREEN ---
+        self.btn_skip = Button("SKIP (GUEST)", (W - btn_w - 20, H - btn_h - 20), size=btn_size, color=(150, 200, 255))
+        
+        # --- 2. CONFIRM / DIALOGS ---
+        # Centered dialog buttons
+        self.btn_confirm_yes = Button("CONFIRM", (cx - btn_w - 10, cy + 50), size=btn_size, color=(150, 255, 150))
+        self.btn_confirm_no = Button("GO BACK", (cx + 10, cy + 50), size=btn_size, color=(255, 150, 150))
+
+        self.btn_delete_yes = Button("YES, DELETE", (cx - btn_w - 10, cy + 50), size=btn_size, color=(255, 100, 100))
+        self.btn_delete_no = Button("NO, GO BACK", (cx + 10, cy + 50), size=btn_size, color=(150, 255, 150))
+
+        # --- 3. MENU SCREEN ---
+        start_y = int(H * 0.4)
+        step_y = int(H * 0.12)
+        self.btn_start = Button("START GAME", (cx - btn_w//2, start_y), size=btn_size)
+        self.btn_records = Button("RECORDS", (cx - btn_w//2, start_y + step_y), size=btn_size)
+        self.btn_exit = Button("EXIT", (cx - btn_w//2, start_y + step_y * 2), size=btn_size)
+
+        # --- 4. DIFFICULTY SCREEN ---
+        # Spread 3 buttons horizontally
+        gap = int(W * 0.05)
+        total_w = 3 * btn_w + 2 * gap
+        start_x = (W - total_w) // 2
+        
+        diff_y = int(H * 0.4)
+        self.btn_easy = Button("EASY", (start_x, diff_y), size=btn_size, color=(150, 255, 150))
+        self.btn_med = Button("NORMAL", (start_x + btn_w + gap, diff_y), size=btn_size, color=(150, 150, 255))
+        self.btn_hard = Button("HARD", (start_x + 2*(btn_w + gap), diff_y), size=btn_size, color=(150, 150, 150))
+        
+        self.btn_special_toggle = Button("SPECIAL: OFF", (cx - btn_w//2, diff_y + step_y), size=btn_size, color=(200, 200, 200))
+        self.btn_back = Button("BACK", (cx - btn_w//2, H - btn_h - 30), size=btn_size)
+
+        # --- 5. RECORDS SCREEN ---
+        # Bottom row buttons
+        self.btn_back_rec = Button("BACK", (W - btn_w - 30, H - btn_h - 30), size=btn_size)
+        self.btn_delete_user = Button("DELETE USER", (30, H - btn_h - 30), size=btn_size, color=(100, 100, 255))
+        
+        # Middle actions
+        self.btn_switch_user = Button("SWITCH USER", (cx - btn_w//2, H - btn_h - 30), size=btn_size, color=(255, 255, 150))
+        self.btn_add_user = Button("ADD USER", (cx - btn_w//2, H - btn_h * 2 - 50), size=btn_size, color=(200, 255, 200))
+        
+        # Keyboard back button
+        self.btn_back_to_record_kb = Button("BACK", (30, H - btn_h - 30), size=btn_size, color=(255, 100, 100))
+
+        # --- 6. SWITCH USER ---
+        self.user_buttons = []
+        self.btn_back_from_switch = Button("BACK", (cx - btn_w//2, H - btn_h - 20), size=btn_size)
+
+        # --- 7. PAUSE OVERLAY ---
+        pause_size = int(W * 0.06)
+        self.btn_pause = Button("II", (W - pause_size - 20, 20), size=(pause_size, int(pause_size*0.8)), color=(255, 255, 200))
+        
+        p_y = int(H * 0.35)
+        self.btn_resume = Button("RESUME", (cx - btn_w//2, p_y), size=btn_size, color=(150, 255, 150))
+        self.btn_restart = Button("RESTART", (cx - btn_w//2, p_y + step_y), size=btn_size, color=(255, 255, 150))
+        self.btn_save_quit = Button("SAVE & QUIT", (cx - btn_w//2, p_y + step_y * 2), size=btn_size, color=(255, 150, 150))
+
     def load_images_from_folder(self, folder):
         images = []
-        if not os.path.exists(folder):
-            return []
+        if not os.path.exists(folder): return []
         for filename in os.listdir(folder):
-            img = cv2.imread(os.path.join(folder, filename), cv2.IMREAD_UNCHANGED) # Load with Alpha
-            if img is not None:
-                images.append(img)
+            try:
+                img = cv2.imread(os.path.join(folder, filename), cv2.IMREAD_UNCHANGED)
+                if img is not None: images.append(img)
+            except: pass
         return images
 
     def refresh_user_buttons(self):
-        """Generates the grid of buttons for the user list."""
         users = self.db.get_user_list()
         self.user_buttons = []
-        start_x, start_y = int(self.width * 0.1), 150
-        col_width = 320
-        row_height = 80
         
-        # [MODIFIED] Logic to wrap buttons if screen is small
-        cols_per_row = max(1, (self.width - 100) // (col_width + 20))
+        W, H = self.width, self.height
+        
+        # Grid settings
+        margin_x = int(W * 0.1)
+        margin_y = int(H * 0.2)
+        
+        btn_w = int(W * 0.25)
+        btn_h = int(H * 0.1)
+        gap_x = 20
+        gap_y = 20
+        
+        cols = 3
         
         for i, u_name in enumerate(users):
-            row = i // cols_per_row
-            col = i % cols_per_row
-            x = start_x + col * (col_width + 20)
-            y = start_y + row * (row_height + 20)
+            row = i // cols
+            col = i % cols
+            x = margin_x + col * (btn_w + gap_x)
+            y = margin_y + row * (btn_h + gap_y)
             
-            if i < 15:
-                self.user_buttons.append(Button(u_name, (x, y), size=(col_width, row_height)))
+            if i < 12: # Limit to fit screen
+                self.user_buttons.append(Button(u_name, (x, y), size=(btn_w, btn_h)))
 
     def set_difficulty(self, level):
         self.current_difficulty = level 
@@ -160,12 +192,10 @@ class HandGame:
         angle = math.atan2(self.center[1] - y, self.center[0] - x)
         speed = self.difficulty_settings["speed_base"] + (self.score * self.difficulty_settings["speed_mult"])
         
-        # Default settings
         enemy_type = 'circle'
         enemy_color = (0, 0, 255)
         icon_img = None
 
-        # Determine Type
         is_special = False
         if self.current_difficulty == "HARD" and self.enable_special_enemies:
             if random.random() < 0.3:
@@ -173,47 +203,48 @@ class HandGame:
                 enemy_type = 'square'
                 enemy_color = (255, 0, 0)
 
-        # [NEW] Assign Random Icon from loaded lists
-        if is_special:
-            if self.icons_fist:
-                icon_img = random.choice(self.icons_fist)
-        else:
-            if self.icons_pinch:
-                icon_img = random.choice(self.icons_pinch)
+        # Pick random icon if available
+        if is_special and self.icons_fist:
+            icon_img = random.choice(self.icons_fist)
+        elif not is_special and self.icons_pinch:
+            icon_img = random.choice(self.icons_pinch)
 
         self.enemies.append({
             'x': x, 'y': y,
             'vx': math.cos(angle) * speed,
             'vy': math.sin(angle) * speed,
-            'radius': 35, # Increased radius slightly for icons
+            'radius': int(self.width * 0.03), # Radius relative to screen width
             'color': enemy_color,
             'type': enemy_type,
-            'icon': icon_img # Store the image in the enemy object
+            'icon': icon_img
         })
 
-    # [NEW] Helper to draw transparent PNG over background
     def draw_enemy_icon(self, bg_img, icon, x, y, size):
-        # Resize icon to fit diameter (size * 2)
         diameter = size * 2
-        icon_resized = cv2.resize(icon, (diameter, diameter))
-        
-        # Calculate bounds
-        h, w, _ = icon_resized.shape # Icon dimensions
-        
+        # Safe resize check
+        if diameter <= 0: return 
+        try:
+            icon_resized = cv2.resize(icon, (diameter, diameter))
+        except: return
+
+        h, w, _ = icon_resized.shape
         y1, y2 = y - h // 2, y + h // 2
         x1, x2 = x - w // 2, x + w // 2
 
-        # Check boundaries (Clipping) to prevent crashes at screen edges
+        # Boundary Check
         if y1 < 0 or y2 > bg_img.shape[0] or x1 < 0 or x2 > bg_img.shape[1]:
-            return # Skip drawing if partially off-screen (or implement complex clipping)
+            return 
 
-        # Alpha Blending
-        alpha_s = icon_resized[:, :, 3] / 255.0
-        alpha_l = 1.0 - alpha_s
-
-        for c in range(0, 3):
-            bg_img[y1:y2, x1:x2, c] = (alpha_s * icon_resized[:, :, c] +
-                                       alpha_l * bg_img[y1:y2, x1:x2, c])
+        # Check if icon has alpha channel
+        if icon_resized.shape[2] == 4:
+            alpha_s = icon_resized[:, :, 3] / 255.0
+            alpha_l = 1.0 - alpha_s
+            for c in range(0, 3):
+                bg_img[y1:y2, x1:x2, c] = (alpha_s * icon_resized[:, :, c] +
+                                           alpha_l * bg_img[y1:y2, x1:x2, c])
+        else:
+            # No alpha, just copy
+            bg_img[y1:y2, x1:x2] = icon_resized
 
     def detect_fist_logic(self, img, hand_lms):
         h, w, _ = img.shape
@@ -226,7 +257,9 @@ class HandGame:
             total_dist += dist
         middle_mcp = hand_lms.landmark[9]
         cx, cy = int(middle_mcp.x * w), int(middle_mcp.y * h)
-        is_fist = total_dist < 400 
+        # Threshold relative to screen height to handle resolution changes
+        threshold = h * 0.5 
+        is_fist = total_dist < threshold
         return is_fist, (cx, cy)
 
     def detect_pinch_logic(self, img, hand_lms, hand_id):
@@ -260,6 +293,13 @@ class HandGame:
         while self.running: 
             success, img = self.cap.read()
             if not success: break
+            
+            # [IMPORTANT] Update width/height if window is resized manually (optional but good)
+            # h, w, _ = img.shape
+            # if self.width != w or self.height != h:
+            #     self.width, self.height = w, h
+            #     self.init_ui_elements() # Re-calc buttons
+
             img = cv2.flip(img, 1)
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             results = self.hands.process(img_rgb)
@@ -285,7 +325,7 @@ class HandGame:
 
             # --- STATE LOGIC ---
             if self.state == "LOGIN":
-                cv2.putText(img, "PLEASE ENTER NAME", (int(self.width*0.3), 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+                cv2.putText(img, "PLEASE ENTER NAME", (int(self.width*0.3), int(self.height*0.15)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 self.keyboard.draw(img, overlay, cursor_positions) 
                 self.btn_skip.draw_on_overlay(overlay, any(self.btn_skip.is_hovering(*c) for c in cursor_positions))
 
@@ -300,7 +340,7 @@ class HandGame:
                         self.state = "MENU"
 
             elif self.state == "ADD_USER_INPUT":
-                cv2.putText(img, "CREATE NEW USER", (int(self.width*0.3), 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+                cv2.putText(img, "CREATE NEW USER", (int(self.width*0.3), int(self.height*0.15)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 self.keyboard.draw(img, overlay, cursor_positions)
                 self.btn_back_to_record_kb.draw_on_overlay(overlay, any(self.btn_back_to_record_kb.is_hovering(*c) for c in cursor_positions))
 
@@ -315,8 +355,11 @@ class HandGame:
             elif self.state == "CONFIRM_ACTION":
                 # Dynamic Box
                 box_x1, box_x2 = int(self.width * 0.25), int(self.width * 0.75)
-                cv2.rectangle(overlay, (box_x1, 200), (box_x2, 500), (255, 255, 255), -1)
+                box_y1, box_y2 = int(self.height * 0.3), int(self.height * 0.7)
+                cv2.rectangle(overlay, (box_x1, box_y1), (box_x2, box_y2), (255, 255, 255), -1)
                 
+                cv2.putText(img, f"Confirm: '{self.keyboard.input_text}'?", (box_x1 + 20, box_y1 + 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+
                 for btn in [self.btn_confirm_yes, self.btn_confirm_no]:
                     is_hover = any(btn.is_hovering(*c) for c in cursor_positions)
                     btn.draw_on_overlay(overlay, is_hover)
@@ -334,8 +377,12 @@ class HandGame:
                         elif self.next_state_after_confirm == "ADD_SUCCESS": self.state = "ADD_USER_INPUT"
 
             elif self.state == "CONFIRM_DELETE":
-                box_x1, box_x2 = int(self.width * 0.15), int(self.width * 0.85)
-                cv2.rectangle(overlay, (box_x1, 150), (box_x2, 550), (200, 200, 255), -1)
+                box_x1, box_x2 = int(self.width * 0.2), int(self.width * 0.8)
+                box_y1, box_y2 = int(self.height * 0.3), int(self.height * 0.7)
+                cv2.rectangle(overlay, (box_x1, box_y1), (box_x2, box_y2), (200, 200, 255), -1)
+                
+                cv2.putText(img, "ARE YOU SURE?", (box_x1 + 50, box_y1 + 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,0), 2)
+
                 for btn in [self.btn_delete_yes, self.btn_delete_no]:
                     is_hover = any(btn.is_hovering(*c) for c in cursor_positions)
                     btn.draw_on_overlay(overlay, is_hover)
@@ -349,7 +396,7 @@ class HandGame:
 
             elif self.state == "MENU":
                 display_name = "Guest" if self.is_guest else self.current_user
-                cv2.putText(img, f"Welcome, {display_name}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+                cv2.putText(img, f"Welcome, {display_name}", (int(self.width*0.05), int(self.height*0.1)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 for btn in [self.btn_start, self.btn_records, self.btn_exit]:
                     is_hover = any(btn.is_hovering(*c) for c in cursor_positions)
                     btn.draw_on_overlay(overlay, is_hover) 
@@ -359,7 +406,7 @@ class HandGame:
                     elif self.btn_exit.is_hovering(*click_pos): self.running = False
 
             elif self.state == "DIFFICULTY":
-                cv2.putText(img, "SELECT DIFFICULTY", (int(self.width * 0.35), 150), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,0), 2)
+                cv2.putText(img, "SELECT DIFFICULTY", (int(self.width * 0.35), int(self.height*0.2)), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,0), 2)
                 self.btn_special_toggle.text = f"SPECIAL: {'ON' if self.enable_special_enemies else 'OFF'}"
                 self.btn_special_toggle.color = (150, 255, 150) if self.enable_special_enemies else (200, 200, 200)
 
@@ -435,14 +482,11 @@ class HandGame:
                         if not self.is_guest:
                             self.db.add_score(self.current_user, self.score, self.current_difficulty)
                     
-                    # [MODIFIED] Draw Enemy: Check if icon exists
                     draw_x, draw_y = int(enemy['x']), int(enemy['y'])
                     
                     if enemy.get('icon') is not None:
-                        # Use the custom image
                         self.draw_enemy_icon(img, enemy['icon'], draw_x, draw_y, enemy['radius'])
                     else:
-                        # Fallback to shapes
                         if enemy['type'] == 'circle':
                             cv2.circle(img, (draw_x, draw_y), int(enemy['radius']), enemy['color'], -1)
                         else:
@@ -451,10 +495,10 @@ class HandGame:
                             cv2.rectangle(img, (draw_x-r, draw_y-r), (draw_x+r, draw_y+r), (255, 255, 255), 2)
 
             elif self.state == "PAUSED":
-                # [MODIFIED] Dynamic Pause Menu Box
                 bx1, bx2 = int(self.width*0.3), int(self.width*0.7)
-                cv2.rectangle(overlay, (bx1, 100), (bx2, 600), (200, 200, 200), -1)
-                cv2.putText(img, "PAUSED", (bx1 + 150, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,0), 3)
+                by1, by2 = int(self.height*0.2), int(self.height*0.8)
+                cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (200, 200, 200), -1)
+                cv2.putText(img, "PAUSED", (bx1 + 100, by1 + 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,0), 3)
                 
                 buttons = [self.btn_resume, self.btn_restart, self.btn_save_quit]
                 for btn in buttons:
@@ -473,21 +517,21 @@ class HandGame:
 
             elif self.state == "GAME_OVER":
                 cv2.rectangle(overlay, (0,0), (self.width, self.height), (0,0,0), -1)
-                cv2.putText(img, "GAME OVER", (int(self.width*0.35), 300), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
-                cv2.putText(img, f"Final Score: {self.score}", (int(self.width*0.4), 380), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(img, "GAME OVER", (int(self.width*0.35), int(self.height*0.4)), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
+                cv2.putText(img, f"Final Score: {self.score}", (int(self.width*0.4), int(self.height*0.5)), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                 self.btn_back.draw_on_overlay(overlay, any(self.btn_back.is_hovering(*c) for c in cursor_positions))
                 for click_pos in all_clicks:
                     if self.btn_back.is_hovering(*click_pos): self.state = "MENU"
 
             elif self.state == "RECORDS":
-                cv2.rectangle(overlay, (100, 100), (self.width - 100, self.height - 50), (240, 240, 240), -1)
-                cv2.putText(img, "PLAYER RECORDS", (int(self.width*0.35), 150), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (50, 50, 50), 3)
+                cv2.rectangle(overlay, (50, 50), (self.width - 50, self.height - 50), (240, 240, 240), -1)
+                cv2.putText(img, "PLAYER RECORDS", (int(self.width*0.35), 120), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (50, 50, 50), 3)
                 if self.is_guest:
-                    cv2.putText(img, "Guest User - No Records", (350, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
+                    cv2.putText(img, "Guest User - No Records", (int(self.width*0.3), 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
                     buttons_to_draw = [self.btn_back_rec, self.btn_switch_user, self.btn_add_user]
                 else:
                     user_data = self.db.data.get(self.current_user, {})
-                    y_offset = 220
+                    y_offset = 200
                     cv2.putText(img, f"User: {self.current_user}", (150, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                     y_offset += 50
                     for diff in ["EASY", "NORMAL", "HARD"]:
@@ -537,12 +581,9 @@ class HandGame:
                 self.keyboard.draw_text(img)
                 self.btn_back_to_record_kb.draw_text_and_border(img)
             elif self.state == "CONFIRM_ACTION":
-                cv2.putText(img, f"Confirm name: '{self.keyboard.input_text}'?", (int(self.width*0.3), 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 self.btn_confirm_yes.draw_text_and_border(img)
                 self.btn_confirm_no.draw_text_and_border(img)
             elif self.state == "CONFIRM_DELETE":
-                cv2.putText(img, "ARE YOU SURE?", (int(self.width*0.35), 250), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,0), 3)
-                cv2.putText(img, f"Delete User: {self.current_user}", (int(self.width*0.35), 320), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
                 self.btn_delete_yes.draw_text_and_border(img)
                 self.btn_delete_no.draw_text_and_border(img)
             elif self.state == "MENU": 
@@ -582,7 +623,7 @@ class HandGame:
                 else:
                     cv2.circle(img, (cx, cy), 15, (0, 0, 255), 2)  
 
-            cv2.imshow("Hand Game Ultimate V9", img)
+            cv2.imshow("Hand Game Ultimate Final", img)
             if cv2.waitKey(1) & 0xFF == 27: break
 
         self.cap.release()
