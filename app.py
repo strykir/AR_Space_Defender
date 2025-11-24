@@ -561,6 +561,9 @@ class HandGame:
                         self.state = "MENU"
 
             elif self.state == "GAME_OVER":
+                self.icons_pinch = self.load_images_from_folder("src/icons/pinch")
+                self.icons_fist = self.load_images_from_folder("src/icons/fist")
+                
                 cv2.rectangle(overlay, (0,0), (self.width, self.height), (0,0,0), -1)
                 cv2.putText(img, "GAME OVER", (int(self.width*0.35), int(self.height*0.4)), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
                 cv2.putText(img, f"Final Score: {self.score}", (int(self.width*0.4), int(self.height*0.5)), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
