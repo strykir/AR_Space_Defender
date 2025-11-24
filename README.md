@@ -163,6 +163,15 @@ Good luck, Commander.
 
 ---
 
-## 📝 License
-This project is intended for personal and educational use.  
-For commercial use, please contact the author.
+## Citation
+
+If you find this project useful in your research, please consider cite:
+
+``` bibtex 
+@misc{AR_Space_Defender,
+    title={Hand Game Ultimate: AR Space Defender},
+    author={AR Space Defender Contributors},
+    howpublished = {\url{https://github.com/strykir/AR_Space_Defender,
+    year={2025}
+}
+```
